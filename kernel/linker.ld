@@ -27,6 +27,12 @@ SECTIONS
         __bss_start = .;
         *(COMMON)
         *(.bss .bss.*)
+        /* Kernel stack. Multiboot v1 leaves registers undefined, so we cannot
+           trust the loader's %esp. Reserve 16 KiB and install it in _start. */
+        . = ALIGN(16);
+        stack_bottom = .;
+        . += 16384;
+        stack_top = .;
         __bss_end = .;
     }
 

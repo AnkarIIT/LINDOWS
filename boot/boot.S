@@ -20,6 +20,8 @@ multiboot_header:
 
 _start:
     cli                           /* no interrupts until the IDT is up */
+    mov $stack_top, %esp          /* Multiboot v1: loader regs undefined, don't trust %esp */
+    xor %ebp, %ebp                /* terminate backtrace chain */
     call kmain
 hang:
     hlt

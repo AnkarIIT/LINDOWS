@@ -18,3 +18,11 @@ Thumbs.db
 # keep the scratch dir out of any accidental add
 .cache/
 /tools/*.bin
+
+# local verification scratch (QEMU screenshots, serial captures)
+/*.ppm
+/*.png
+/*.log
+/ser-*.log
+/shot-*.ppm
+/boot-serial.log
