@@ -16,8 +16,8 @@ CC       ?= i686-elf-gcc
 AS       ?= i686-elf-as
 LD       ?= i686-elf-ld
 CFLAGS   = -ffreestanding -O2 -Wall -Wextra -nostdlib
-ASFLAGS  = -f elf32 -Iboot
-LDFLAGS  = -T kernel/linker.ld -nostdlib -nodefaultlibs -nostartfiles
+ASFLAGS  = --32 -Iboot
+LDFLAGS  = -T kernel/linker.ld
 
 KERNEL_BIN = kernel/lindows.bin
 ISO        = build/lindows.iso
