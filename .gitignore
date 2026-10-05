@@ -1,0 +1,19 @@
+# LINDOWS build/tooling artifacts
+/build/
+/kernel/gen/
+/kernel/*.o
+/kernel/*.bin
+/kernel/*.elf
+/boot/*.o
+/tools/*.zip
+/tools/i686-elf/
+/iso/
+*.iso
+
+# editor / OS
+*.swp
+.DS_Store
+Thumbs.db
+
+# keep the scratch dir out of any accidental add
+.cache/
