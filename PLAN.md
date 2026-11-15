@@ -50,8 +50,13 @@ Goal: a basis for everything that follows.
 - [x] Automated boot smoke test — tools/smoke_test.sh (build + headless QEMU
       boot + serial-log assertions). This is the `make test` equivalent; there
       is no other CI yet.
-- [ ] Physical + virtual paging, higher-half kernel (needs mb_info memory map
-      — already saved by boot.S and passed to kmain)
+- [x] Physical + virtual paging — kernel/pmm.c + kernel/vmm.c. Bitmap frame
+      allocator over the multiboot mmap (QEMU: 32736 frames / ~127.75 MiB);
+      identity map of all tracked RAM, kernel alias window @0xC0000000,
+      recursive PD @0xFFFFF000; CR0.PG|WP enabled. Verified live: alias
+      readback, PIT still ticking under PG, and a -DLINDOWS_PFAULT_TEST
+      build faults at 0x40000000 -> PANIC with CR2 = 0x40000000.
+      (Higher-half link relocation is a later step inside this item.)
 - [ ] Basic heap (linked-list, then better algorithms per profile)
 - [ ] Spinlocks / pre-emptive round-robin scheduler
 
