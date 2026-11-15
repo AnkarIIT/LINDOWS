@@ -16,4 +16,9 @@ typedef signed   long long i64;
 typedef u32 usize;
 typedef u32 uintptr;
 
+/* Freestanding: no <stddef.h>. */
+#ifndef NULL
+#define NULL ((void*)0)
+#endif
+
 #endif /* LINDOWS_TYPES_H */
