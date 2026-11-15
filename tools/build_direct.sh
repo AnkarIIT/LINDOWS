@@ -28,14 +28,15 @@ echo ">> boot.o + isr.o assembled"
 CFLAGS=(-ffreestanding -O2 -Wall -Wextra -nostdlib
         -fno-asynchronous-unwind-tables -fno-stack-protector
         -Ikernel -Ikernel/gen)
-for src in console panic gdt idt main; do
+for src in console panic gdt idt pmm vmm main; do
     "$TBIN/i686-elf-gcc.exe" "${CFLAGS[@]}" -c "kernel/$src.c" -o "kernel/$src.o"
 done
-echo ">> console.o panic.o gdt.o idt.o main.o compiled"
+echo ">> console.o panic.o gdt.o idt.o pmm.o vmm.o main.o compiled"
 
 # 4. link (direct ld; minimal kernel needs no libgcc)
 "$TBIN/i686-elf-ld.exe" -T kernel/linker.ld boot/boot.o boot/isr.o \
-    kernel/console.o kernel/panic.o kernel/gdt.o kernel/idt.o kernel/main.o \
+    kernel/console.o kernel/panic.o kernel/gdt.o kernel/idt.o \
+    kernel/pmm.o kernel/vmm.o kernel/main.o \
     -o kernel/lindows.bin
 echo ">> linked: kernel/lindows.bin ($(stat -c %s kernel/lindows.bin) bytes)"
 
