@@ -23,12 +23,24 @@ echo -n "   profile_gen.h: "; cat kernel/gen/profile_gen.h
 "$TBIN/i686-elf-as.exe"  --32 -Iboot -o boot/boot.o boot/boot.S
 echo ">> boot.o assembled"
 
+# 2b. assemble the ISR stubs (Phase 2)
+"$TBIN/i686-elf-as.exe"  --32 -Iboot -o boot/isr.o boot/isr.S
+echo ">> isr.o assembled"
+
 # 3. compile the kernel (freestanding, no host libc)
-"$TBIN/i686-elf-gcc.exe" -ffreestanding -O2 -Wall -Wextra -nostdlib -Ikernel/gen -c kernel/main.c -o kernel/main.o
+"$TBIN/i686-elf-gcc.exe" -ffreestanding -O2 -Wall -Wextra -nostdlib -Ikernel -Ikernel/gen -c kernel/main.c -o kernel/main.o
 echo ">> main.o compiled"
 
+# 3b. compile the GDT (Phase 2 core primitive)
+"$TBIN/i686-elf-gcc.exe" -ffreestanding -O2 -Wall -Wextra -nostdlib -Ikernel -Ikernel/gen -c kernel/gdt.c -o kernel/gdt.o
+echo ">> gdt.o compiled"
+
+# 3c. compile the IDT + PIC + PIT (timer IRQ)
+"$TBIN/i686-elf-gcc.exe" -ffreestanding -O2 -Wall -Wextra -nostdlib -Ikernel -Ikernel/gen -c kernel/idt.c -o kernel/idt.o
+echo ">> idt.o compiled"
+
 # 4. link (direct ld; minimal kernel needs no libgcc)
-"$TBIN/i686-elf-ld.exe" -T kernel/linker.ld boot/boot.o kernel/main.o -o kernel/lindows.bin
+"$TBIN/i686-elf-ld.exe" -T kernel/linker.ld boot/boot.o boot/isr.o kernel/gdt.o kernel/idt.o kernel/main.o -o kernel/lindows.bin
 echo ">> linked: kernel/lindows.bin"
 ls -la kernel/lindows.bin
 
