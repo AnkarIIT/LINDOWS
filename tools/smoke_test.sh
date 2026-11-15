@@ -35,5 +35,11 @@ grep -q "timer verified"        "$LOG" || { echo "FAIL: timer not verified";   S
 grep -q "boot ok"               "$LOG" || { echo "FAIL: boot-ok line missing"; STATUS=1; }
 grep -q "PANIC"                 "$LOG" && { echo "FAIL: kernel panicked";      STATUS=1; }
 
+# A reboot loop (e.g. triple fault) reprints the banner — QEMU+SeaBIOS reset
+# the machine and boot again. Exactly ONE banner is healthy.
+if [ "$(grep -c 'LINDOWS boot' "$LOG")" -gt 1 ]; then
+    echo "FAIL: boot repeated => reset loop (triple fault?)"; STATUS=1
+fi
+
 [ "$STATUS" -eq 0 ] && echo ">> SMOKE TEST PASSED" || echo ">> SMOKE TEST FAILED"
 exit "$STATUS"
