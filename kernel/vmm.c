@@ -1,98 +1,91 @@
 /*
  * LINDOWS VMM implementation — see vmm.h for the design.
+ * All table maintenance goes through the recursive mapping.
  */
 #include "vmm.h"
 #include "pmm.h"
 #include "console.h"
 #include "panic.h"
 
-#define PTE_P 0x001u    /* present                     */
-#define PTE_RW 0x002u   /* writable                    */
+#define PTE_P  0x001u    /* present  */
+#define PTE_RW 0x002u    /* writable */
 
-/* Kernel image base (linker symbol). */
-extern const u8 _kstart[];
+/* boot.S's early tables (linker symbols, VMA; phys = vma - VMM_V2P). */
+extern const u8 early_pd[];
+extern const u8 early_low_pt[];
 
-static u32 page_directory[1024] __attribute__((aligned(4096)));
-static u32 identity_frames = 0;
+static u32* page_directory = 0;   /* VMA view of the PD (kernel image) */
+static u32  pd_phys        = 0;
+static u32  identity_frames = 0;
 
-static void load_cr3(u32 phys) {
-    __asm__ volatile("mov %0, %%cr3" :: "r"(phys) : "memory");
+/* Recursive views: the PD itself at 0xFFFFF000; PT for PD index i at
+ * 0xFFC00000 + i*4 KiB. Valid as soon as PD[1023] = pd_phys | P|RW. */
+static volatile u32* pd_view(void) {
+    return (volatile u32*)VMM_RECURSE;
 }
-
-static u32 make_pt(void) {
-    u32 phys = pmm_alloc();
-    if (!phys)
-        panic("vmm: out of frames while building page tables", 0, 0);
-    u32* pt = (u32*)phys;               /* linear == physical pre-PG */
-    for (u32 i = 0; i < 1024; i++) pt[i] = 0;
-    return phys;
+static volatile u32* pt_view(u32 pdi) {
+    return (volatile u32*)(0xFFC00000u + pdi * PAGE_SIZE);
 }
 
 void vmm_init(void) {
     identity_frames = pmm_installed_frames();
+    page_directory  = (u32*)early_pd;
+    pd_phys         = (u32)early_pd - VMM_V2P;
 
-    /* 1. Identity-map all tracked RAM. `base` counts frames: 1024 frames
-     *    (4 MiB) per page table -> PD index = base/1024. */
-    for (u32 base = 0; base < identity_frames; base += 1024) {
-        u32 pt_phys = make_pt();
-        u32* pt = (u32*)pt_phys;
+    /* boot.S already installed:
+     *   PD[0] = PD[768] = early_low_pt  (identity 0..4 MiB + kernel window)
+     *   PD[1023] = pd_phys | P|RW       (recursive)
+     * Continue the identity map for the remaining RAM: one PT per 4 MiB. */
+    for (u32 base = 1024; base < identity_frames; base += 1024) {
+        u32 pdi = base / 1024;
+        u32 pt_phys = pmm_alloc();
+        if (!pt_phys)
+            panic("vmm: out of frames while building page tables", 0, 0);
+        pd_view()[pdi] = pt_phys | PTE_P | PTE_RW;      /* link, then fill */
+        volatile u32* pt = pt_view(pdi);
         u32 n = (identity_frames - base >= 1024) ? 1024 : identity_frames - base;
         for (u32 i = 0; i < n; i++)
             pt[i] = ((base + i) << 12) | PTE_P | PTE_RW;
-        page_directory[base / 1024] = pt_phys | PTE_P | PTE_RW;
     }
 
-    /* 2. Kernel alias: linear 0xC0000000..0xC0100000 -> phys [_kstart..+1MiB).
-     *    NOTE: kernel must stay under 1 MiB for this mapping to be complete. */
-    u32 kbase = (u32)_kstart;
-    if (kbase & 0xFFE00000u)
-        panic("vmm: kernel base not 2MiB-aligned under 0xC0000000 window", 0, 0);
-    u32 alias_pt = make_pt();
-    u32* apt = (u32*)alias_pt;
-    for (u32 i = 0; i < 256; i++)
-        apt[i] = (kbase + i * PAGE_SIZE) | PTE_P | PTE_RW;
-    page_directory[0x300] = alias_pt | PTE_P | PTE_RW;   /* 0xC0000000/4MiB */
-
-    /* 3. Recursive mapping: last PD entry points at the PD itself. */
-    page_directory[1023] = (u32)page_directory | PTE_P | PTE_RW;
-
-    /* 4. Enable paging. PG (bit 31) + WP (bit 16: write-protect RO pages). */
-    load_cr3((u32)page_directory);
-    u32 cr0;
-    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
-    cr0 |= 0x80010000u;
-    __asm__ volatile("mov %0, %%cr0" :: "r"(cr0) : "memory");
+    /* Reload CR3 so the new PD entries are authoritative. PG/WP are already
+     * on (boot.S); this just flushes stale TLB state. */
+    __asm__ volatile("mov %0, %%cr3" :: "r"(pd_phys) : "memory");
 }
 
 u32 vmm_get_phys(u32 virt) {
     u32 pdi = virt >> 22;
-    u32 pte_idx = (virt >> 12) & 0x3FF;
-    if (!(page_directory[pdi] & PTE_P)) return 0;
-    /* Recursive trick: PD[1023] maps the PD; PT for `virt` lives at
-     * 0xFFC00000 + pdi*4096, its PTEs at that + pte_idx*4. */
-    volatile u32* pt_entry = (volatile u32*)(0xFFC00000u + pdi * PAGE_SIZE + pte_idx * 4);
-    if (!(*pt_entry & PTE_P)) return 0;
-    return (*pt_entry & 0xFFFFF000u) | (virt & 0xFFFu);
+    u32 pti = (virt >> 12) & 0x3FF;
+    if (!(pd_view()[pdi] & PTE_P)) return 0;
+    volatile u32* pt = pt_view(pdi);
+    if (!(pt[pti] & PTE_P)) return 0;
+    return (pt[pti] & 0xFFFFF000u) | (virt & 0xFFFu);
 }
 
 void vmm_verify(void) {
-    /* 1. The kernel alias must read back identical to the direct (identity)
-     *    view of the same memory. */
-    u32 off = (u32)page_directory - (u32)_kstart;
-    volatile const u32* alias = (const u32*)(VMM_KALIAS_BASE + off);
-    if (alias[0] != page_directory[0] ||
-        alias[255] != page_directory[255] ||
-        alias[1023] != page_directory[1023])
-        panic("vmm: kernel alias readback mismatch", (u32)alias, 0);
+    /* 1. Kernel VMA <-> identity alias: page_directory lives in the kernel
+     *    image, so phys = vma - V2P; reading at that linear address must
+     *    return the same bytes as the direct VMA read. */
+    volatile const u32* via_identity = (const u32*)((u32)page_directory - VMM_V2P);
+    if (via_identity[0]     != page_directory[0] ||
+        via_identity[768]   != page_directory[768] ||
+        via_identity[1023]  != page_directory[1023])
+        panic("vmm: identity<->kernel alias mismatch", (u32)page_directory, 0);
 
-    /* 2. Interrupts must still flow with PG on: wait for PIT ticks. */
+    /* 2. Recursive PD view must mirror the direct view. */
+    if (pd_view()[0]     != page_directory[0] ||
+        pd_view()[768]   != page_directory[768] ||
+        pd_view()[1023]  != page_directory[1023])
+        panic("vmm: recursive PD readback mismatch", VMM_RECURSE, 0);
+
+    /* 3. Interrupts must still flow with paging on: wait for PIT ticks. */
     extern volatile u32 pit_ticks;
     u32 t0 = pit_ticks;
     u32 spins = 0;
     while (pit_ticks < t0 + 3) {
         __asm__ volatile("hlt");
         if (++spins > 100000000u)
-            panic("vmm: PIT dead after enabling paging", 0, 0);
+            panic("vmm: PIT dead with paging enabled", 0, 0);
     }
 }
 
