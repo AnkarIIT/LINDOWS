@@ -32,15 +32,15 @@ CFLAGS=(-ffreestanding -O2 -Wall -Wextra -nostdlib
 # (see main.c: #UD test and #PF test; normal builds must NOT set this).
 EXTRA="${LINDOWS_EXTRA_CFLAGS:-}"
 if [ -n "$EXTRA" ]; then echo ">> extra cflags: $EXTRA"; fi
-for src in console panic gdt idt pmm vmm main; do
+for src in console panic gdt idt pmm vmm heap main; do
     "$TBIN/i686-elf-gcc.exe" "${CFLAGS[@]}" $EXTRA -c "kernel/$src.c" -o "kernel/$src.o"
 done
-echo ">> console.o panic.o gdt.o idt.o pmm.o vmm.o main.o compiled"
+echo ">> console.o panic.o gdt.o idt.o pmm.o vmm.o heap.o main.o compiled"
 
 # 4. link (direct ld; minimal kernel needs no libgcc)
 "$TBIN/i686-elf-ld.exe" -T kernel/linker.ld boot/boot.o boot/isr.o \
     kernel/console.o kernel/panic.o kernel/gdt.o kernel/idt.o \
-    kernel/pmm.o kernel/vmm.o kernel/main.o \
+    kernel/pmm.o kernel/vmm.o kernel/heap.o kernel/main.o \
     -o kernel/lindows.bin
 echo ">> linked: kernel/lindows.bin ($(stat -c %s kernel/lindows.bin) bytes)"
 
