@@ -2,8 +2,9 @@
 
 A from-scratch, user-profile-optimized operating system.
 
-LINDOWS is built bottom-up from zero (no Linux/UNIX code) on x86_64. Its
-defining idea: the OS is compiled, booted, and tuned per *user profile* /
+LINDOWS is built bottom-up from zero (no Linux/UNIX code), currently a 32-bit
+Multiboot kernel with a planned move to x86_64 long mode (PLAN.md Phase 3).
+Its defining idea: the OS is compiled, booted, and tuned per *user profile* /
 usecase. At first boot you pick a usecase — `developer`, `gamer`, `creator`,
 `server`, `minimal`, … — and that profile drives:
 
@@ -27,12 +28,15 @@ Profiles are not fixed: usage is fed back in to adapt the running system
   papers/      reference material and design reading
   notes/       dev journal
   outputs/     drafts/ and plans/ — produced documents
-  tests/       unit + integration tests
+  (tests/ does not exist yet; the boot smoke test in tools/smoke_test.sh is
+   the current test suite)
 
-## Quick start (after toolchain)
+## Quick start (this host — no make, no grub-mkrescue)
 
-  make iso        # build a bootable ISO
-  make run        # launch in QEMU
-  make test       # run the test suite
+  tools/build_direct.sh              # canonical build -> kernel/lindows.bin
+  tools/smoke_test.sh                # build + headless QEMU boot + assertions
+
+(The Makefile mirrors the script for hosts that have make. `make iso` needs
+grub-mkrescue, which is not installed yet — the ISO artifact is deferred.)
 
 See PLAN.md for the phased roadmap.
