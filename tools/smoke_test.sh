@@ -34,6 +34,12 @@ grep -q "LINDOWS boot"          "$LOG" || { echo "FAIL: banner missing";       S
 grep -q "timer verified"        "$LOG" || { echo "FAIL: timer not verified";   STATUS=1; }
 grep -q "boot ok"               "$LOG" || { echo "FAIL: boot-ok line missing"; STATUS=1; }
 grep -q "heap verified"         "$LOG" || { echo "FAIL: heap not verified";    STATUS=1; }
+grep -q "sched verified"        "$LOG" || { echo "FAIL: scheduler not verified"; STATUS=1; }
+grep -q "<A><B><A><B><A><B>"    "$LOG" || { echo "FAIL: no A/B alternation (not round-robin)"; STATUS=1; }
+A_TURNS=$(grep -o "<A>" "$LOG" | wc -l)
+B_TURNS=$(grep -o "<B>" "$LOG" | wc -l)
+[ "$A_TURNS" -ge 5 ] || { echo "FAIL: task A ran $A_TURNS turns (< 5)"; STATUS=1; }
+[ "$B_TURNS" -ge 5 ] || { echo "FAIL: task B ran $B_TURNS turns (< 5)"; STATUS=1; }
 grep -q "PANIC"                 "$LOG" && { echo "FAIL: kernel panicked";      STATUS=1; }
 
 # A reboot loop (e.g. triple fault) reprints the banner — QEMU+SeaBIOS reset
