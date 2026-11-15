@@ -62,6 +62,41 @@ u32 vmm_get_phys(u32 virt) {
     return (pt[pti] & 0xFFFFF000u) | (virt & 0xFFFu);
 }
 
+int vmm_map_page(u32 virt, u32 phys) {
+    if ((virt | phys) & 0xFFFu) return -1;   /* both must be page-aligned */
+    u32 pdi = virt >> 22;
+    u32 pti = (virt >> 12) & 0x3FF;
+
+    if (!(pd_view()[pdi] & PTE_P)) {
+        /* No page table covers this 4 MiB yet: take a frame for one, link
+         * it into the PD, and zero it through the recursive view (same
+         * link-then-fill order as vmm_init). Nothing else can be using this
+         * 4 MiB region, so the transient unzeroed window is safe. */
+        u32 pt_phys = pmm_alloc();
+        if (!pt_phys) return -1;
+        pd_view()[pdi] = pt_phys | PTE_P | PTE_RW;
+        volatile u32* pt = pt_view(pdi);
+        for (u32 i = 0; i < 1024; i++) pt[i] = 0;
+    }
+
+    volatile u32* pt = pt_view(pdi);
+    pt[pti] = phys | PTE_P | PTE_RW;
+    __asm__ volatile("invlpg (%0)" :: "r"(virt) : "memory");
+    return 0;
+}
+
+u32 vmm_unmap_page(u32 virt) {
+    u32 pdi = virt >> 22;
+    u32 pti = (virt >> 12) & 0x3FF;
+    if (!(pd_view()[pdi] & PTE_P)) return 0;
+    volatile u32* pt = pt_view(pdi);
+    u32 old = pt[pti];
+    if (!(old & PTE_P)) return 0;
+    pt[pti] = 0;
+    __asm__ volatile("invlpg (%0)" :: "r"(virt) : "memory");
+    return old & 0xFFFFF000u;
+}
+
 void vmm_verify(void) {
     /* 1. Kernel VMA <-> identity alias: page_directory lives in the kernel
      *    image, so phys = vma - V2P; reading at that linear address must
