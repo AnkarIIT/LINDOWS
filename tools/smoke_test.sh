@@ -33,6 +33,7 @@ STATUS=0
 grep -q "LINDOWS boot"          "$LOG" || { echo "FAIL: banner missing";       STATUS=1; }
 grep -q "timer verified"        "$LOG" || { echo "FAIL: timer not verified";   STATUS=1; }
 grep -q "boot ok"               "$LOG" || { echo "FAIL: boot-ok line missing"; STATUS=1; }
+grep -q "heap verified"         "$LOG" || { echo "FAIL: heap not verified";    STATUS=1; }
 grep -q "PANIC"                 "$LOG" && { echo "FAIL: kernel panicked";      STATUS=1; }
 
 # A reboot loop (e.g. triple fault) reprints the banner — QEMU+SeaBIOS reset
