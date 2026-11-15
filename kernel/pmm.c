@@ -144,11 +144,13 @@ void pmm_init(u32 mb_info) {
         mark_range_free(LOW_MEM_FRAMES, installed_frames);
     }
 
-    /* 3. Reserve the kernel image ([_kstart, _kend), incl. this bitmap). */
-    extern const u8 _kstart[];
-    extern const u8 _kend[];
-    u32 kf = (u32)_kstart >> 12;
-    u32 ke = (((u32)_kend) + PAGE_SIZE - 1) >> 12;
+    /* 3. Reserve the kernel image at its PHYSICAL location. _kphys_* are
+     *    LMA symbols from linker.ld (the _kstart/_kend symbols are
+     *    higher-half VMAs and must NOT be used for physical bookkeeping). */
+    extern const u8 _kphys_start[];
+    extern const u8 _kphys_end[];
+    u32 kf = (u32)_kphys_start >> 12;
+    u32 ke = (((u32)_kphys_end) + PAGE_SIZE - 1) >> 12;
     for (u32 f = kf; f < ke; f++)
         if (!is_used(f)) { mark_used(f); free_count--; }
 }
