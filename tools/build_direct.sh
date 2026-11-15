@@ -28,8 +28,12 @@ echo ">> boot.o + isr.o assembled"
 CFLAGS=(-ffreestanding -O2 -Wall -Wextra -nostdlib
         -fno-asynchronous-unwind-tables -fno-stack-protector
         -Ikernel -Ikernel/gen)
+# Optional fault-injection hooks, e.g. LINDOWS_EXTRA_CFLAGS=-DLINDOWS_PFAULT_TEST
+# (see main.c: #UD test and #PF test; normal builds must NOT set this).
+EXTRA="${LINDOWS_EXTRA_CFLAGS:-}"
+if [ -n "$EXTRA" ]; then echo ">> extra cflags: $EXTRA"; fi
 for src in console panic gdt idt pmm vmm main; do
-    "$TBIN/i686-elf-gcc.exe" "${CFLAGS[@]}" -c "kernel/$src.c" -o "kernel/$src.o"
+    "$TBIN/i686-elf-gcc.exe" "${CFLAGS[@]}" $EXTRA -c "kernel/$src.c" -o "kernel/$src.o"
 done
 echo ">> console.o panic.o gdt.o idt.o pmm.o vmm.o main.o compiled"
 
@@ -46,11 +50,20 @@ echo ">> multiboot header check:"
 python - <<'PY'
 import struct
 b = open('kernel/lindows.bin', 'rb').read()
-i = b.find(b'\x02\xb0\xad\x1b')
-assert i >= 0, "multiboot magic not found"
-magic, flags, checksum = struct.unpack_from('<III', b, i)
-print(f"   @ 0x{i:x}: magic={hex(magic)} flags={hex(flags)} checksum={hex(checksum)}")
-assert (magic + flags + checksum) % (1 << 32) == 0, "bad checksum"
-print("   checksum valid (sum mod 2^32 == 0)  OK")
+magic_bytes = b'\x02\xb0\xad\x1b'
+pos, found = 0, False
+while True:
+    i = b.find(magic_bytes, pos)
+    if i < 0:
+        break
+    magic, flags, checksum = struct.unpack_from('<III', b, i)
+    if (magic + flags + checksum) % (1 << 32) == 0:
+        print(f"   @ 0x{i:x}: magic={hex(magic)} flags={hex(flags)} checksum={hex(checksum)}")
+        assert flags in (0x3, 0x10003), "unexpected header flags"
+        found = True
+        break
+    pos = i + 1
+assert found, "no checksum-valid multiboot v1 header in image"
+print("   header checksum valid (sum mod 2^32 == 0)  OK")
 PY
 echo ">> DONE: LINDOWS kernel built + verified as a Multiboot ELF"
