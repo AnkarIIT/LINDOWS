@@ -3,11 +3,12 @@
  *
  * Builds a 256-entry IDT, remaps the 8259A cascade so hardware IRQs no longer
  * overlap the CPU exception vectors (0..7), programs the PIT for a 100 Hz
- * tick, and unmasks the timer line (IRQ0). Must run AFTER gdt_init(), because
- * its interrupt gates reference the kernel code-segment selector 0x08.
+ * tick, and unmasks ONLY IRQ0. Every vector 0..47 is installed with a stub in
+ * boot/isr.S that routes through isr_dispatch(), so faults are diagnosed, not
+ * silent triple-faults. Must run AFTER gdt_init(): the gates reference the
+ * kernel code-segment selector 0x08.
  */
 #ifndef LINDOWS_IDT_H
-#define LINDATIONS_IDT_H
 #define LINDOWS_IDT_H
 
 #include "types.h"
@@ -37,11 +38,19 @@ struct idt_ptr {
 #define IRQ_TIMER        0
 #define IRQ_TIMER_VEC    (PIC_VECTOR_BASE + IRQ_TIMER)
 
-/* Assembly ISR entry for the timer (see boot/isr.S). */
-extern void isr_timer(void);
+/* Exception name table (0..31), filled by idt.c. */
+extern const char* const exception_name[32];
 
-/* PIT tick counter, incremented from the timer ISR. */
+/* C entry point for every gate (called from boot/isr.S common tails).
+ * `regs` points at the uniform frame: regs[0..7]=EDI..EAX, [8]=error code,
+ * [9]=EIP, [10]=CS, [11]=EFLAGS. */
+void isr_dispatch(u32 vector, u32* regs);
+
+/* PIT tick counter, incremented from isr_dispatch. */
 extern volatile u32 pit_ticks;
+
+/* Diagnostics counter for unexpected/spurious IRQs. */
+extern volatile u32 unexpected_irqs;
 
 /* Install IDT, remap + program PIC/PIT, enable IRQs. */
 void idt_init(void);
