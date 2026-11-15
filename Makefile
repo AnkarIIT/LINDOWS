@@ -15,7 +15,7 @@ PROFILE  ?= minimal
 CC       ?= i686-elf-gcc
 AS       ?= i686-elf-as
 LD       ?= i686-elf-ld
-CFLAGS   = -ffreestanding -O2 -Wall -Wextra -nostdlib
+CFLAGS   = -ffreestanding -O2 -Wall -Wextra -nostdlib -Ikernel
 ASFLAGS  = --32 -Iboot
 LDFLAGS  = -T kernel/linker.ld
 
@@ -34,11 +34,20 @@ profile-gen:
 boot/boot.o: boot/boot.S boot/multiboot.inc
 	$(AS) $(ASFLAGS) $< -o $@
 
-kernel/main.o: kernel/main.c kernel/gen/profile_gen.h
+kernel/main.o: kernel/main.c kernel/gdt.h kernel/idt.h kernel/gen/profile_gen.h
 	$(CC) $(CFLAGS) -Ikernel/gen -c $< -o $@
 
-$(KERNEL_BIN): profile-gen boot/boot.o kernel/main.o
-	$(LD) $(LDFLAGS) boot/boot.o kernel/main.o -o $@
+kernel/gdt.o: kernel/gdt.c kernel/gdt.h
+	$(CC) $(CFLAGS) -Ikernel/gen -c $< -o $@
+
+kernel/idt.o: kernel/idt.c kernel/idt.h
+	$(CC) $(CFLAGS) -Ikernel/gen -c $< -o $@
+
+boot/isr.o: boot/isr.S
+	$(AS) $(ASFLAGS) $< -o $@
+
+$(KERNEL_BIN): profile-gen boot/boot.o boot/isr.o kernel/gdt.o kernel/idt.o kernel/main.o
+	$(LD) $(LDFLAGS) boot/boot.o boot/isr.o kernel/gdt.o kernel/idt.o kernel/main.o -o $@
 
 iso: $(ISO)
 
