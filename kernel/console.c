@@ -2,6 +2,7 @@
  * LINDOWS console implementation — VGA text buffer + COM1 serial mirror.
  * Everything the kernel prints goes through here, so a headless QEMU run
  * (-serial file:...) captures the full boot log including panics.
+ * VGA output works via the text buffer at 0xB8000.
  */
 #include "console.h"
 #include "ports.h"
