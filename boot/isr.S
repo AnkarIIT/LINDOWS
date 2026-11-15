@@ -101,8 +101,30 @@ ISR_NOERR 29
 ISR_NOERR 30
 ISR_NOERR 31
 
-/* ---- 16 legacy-PIC IRQ stubs (vectors 32..47, never carry error codes) ---- */
-ISR_NOERR 32
+/* ---- 16 legacy-PIC IRQ stubs (vectors 32..47, never carry error codes) ----
+ * IRQ0 (vector 32) is the SCHEDULER'S pre-emption point: unlike the generic
+ * stubs it does NOT call isr_dispatch. Instead it hands the frame to C
+ * `sched_tick(frame)`, which counts the tick, EOIs the PIC, and returns the
+ * frame pointer to resume through — ours (no switch) or another task's
+ * (context switch). Adopting a returned frame is a plain `mov %eax, %esp`,
+ * because resuming = popa; add $4; iret at that pointer (see sched.h).
+ * Vectors 33..47 use the generic stub. */
+.global isr32
+.extern sched_tick
+isr32:
+    push $0               /* fake error code -> uniform frame           */
+    pusha
+    mov %esp, %eax        /* frame = &EDI (= esp here: no vector slot
+                             was pushed after pusha, unlike the generic
+                             stubs where lea 4(%esp) is correct)        */
+    push %eax             /* arg1: frame                                */
+    call sched_tick
+    pop %ecx              /* cdecl: discard the arg (restored by popa)  */
+    mov %eax, %esp        /* adopt the returned frame (ours or next)    */
+    popa
+    add $4, %esp          /* pop fake error code                        */
+    iret
+
 ISR_NOERR 33
 ISR_NOERR 34
 ISR_NOERR 35
