@@ -19,8 +19,9 @@ Notes
   - OSDev convention: start 32-bit (i686-elf + GRUB multiboot), add 64-bit later.
   - The prebuilt cross-toolchain ships `gas`, so boot.S/multiboot.inc are written
     in GNU as syntax (not NASM).
-  - QEMU was installed without admin rights (Stefan Weil prebuilt build,
-    user-writable dir) — see notes/phase1-verification.md.
+  - QEMU: the original install (C:\OS\tools\qemu, v11.1.0) no longer exists.
+    The working emulator is the vendored build at C:\OS\AI-OS\vendor\qemu
+    (v9.2.0) — smoke_test.sh defaults to it (override with LINDOWS_QEMU).
 
 ## Phase 1 — Bootstrapping a 32-bit kernel
 
@@ -39,8 +40,18 @@ Goal: a basis for everything that follows.
 - [x] GDT (protected mode segments) — kernel/gdt.c: null/code/data, far-jump
       CS reload + data-segment reload; linker PHDRS (R E / R / RW), no RWX;
       live-verified in QEMU (Phase 2 banner prints after gdt_init()).
-- [ ] IDT + PIC (8259A remap) + interrupt handling
-- [ ] Physical + virtual paging, higher-half kernel
+- [x] IDT + PIC (8259A remap) + interrupt handling — kernel/idt.c + boot/isr.S.
+      Full exception coverage: all 32 CPU exceptions + all 16 IRQ vectors
+      installed and routed through isr_dispatch() (C) with a panic() register
+      dump on faults. PIC-only delivery (APIC/IOAPIC deferred to Phase 4).
+      Verified live: boot smoke test (tools/smoke_test.sh) passes; a
+      deliberate #UD (build with -DLINDOWS_FAULT_TEST) produces a clean
+      PANIC dump instead of a silent triple-fault.
+- [x] Automated boot smoke test — tools/smoke_test.sh (build + headless QEMU
+      boot + serial-log assertions). This is the `make test` equivalent; there
+      is no other CI yet.
+- [ ] Physical + virtual paging, higher-half kernel (needs mb_info memory map
+      — already saved by boot.S and passed to kmain)
 - [ ] Basic heap (linked-list, then better algorithms per profile)
 - [ ] Spinlocks / pre-emptive round-robin scheduler
 
