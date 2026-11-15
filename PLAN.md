@@ -73,6 +73,17 @@ Goal: a basis for everything that follows.
       the coalesced region, krealloc content preservation — smoke test
       asserts the "heap verified" line. (Better algorithms per profile:
       later, when profiles have real workload differences.)
+- [x] Spinlocks + pre-emptive round-robin scheduler — kernel/spinlock.h +
+      kernel/sched.c, pre-emption in boot/isr.S. The IRQ0 (PIT) stub saves
+      the full GPR frame, calls sched_tick(frame) (tick count + PIC EOI +
+      round-robin pick) and irets through the returned frame — the context
+      switch is a plain `mov %eax, %esp`. Tasks are kernel-mode with 4 KiB
+      kmalloc'd stacks; kmain is task 0 (idle); task_exit() recycles stacks
+      (freed on the tick AFTER the dying one, never from the dying stack).
+      Verified live: two demo tasks print one token per slice under a
+      spinlock and the serial log shows strict <A><B> alternation over 15
+      pre-emptive switches; the smoke test FAILs without the alternation.
+      (Priorities, SMP-true atomics, userland: later phases.)
 - [ ] Spinlocks / pre-emptive round-robin scheduler
 
 ## Phase 3 — 64-bit long mode
