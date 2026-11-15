@@ -28,6 +28,10 @@ void panic(const char* msg, u32 vector, const u32* regs) {
         console_print_hex(regs[10], CON_COLOR_WHITE);
         console_puts("\r\neflags : ", CON_COLOR_RED);
         console_print_hex(regs[11], CON_COLOR_WHITE);
+        u32 cr2;
+        __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
+        console_puts("\r\ncr2    : ", CON_COLOR_RED);
+        console_print_hex(cr2, CON_COLOR_WHITE);   /* #PF faulting address */
         for (int i = 0; i < 8; i++) {
             console_puts("\r\n", CON_COLOR_RED);
             console_puts(rnames[i], CON_COLOR_RED);
