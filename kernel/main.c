@@ -23,6 +23,7 @@
 #include "panic.h"
 #include "pmm.h"
 #include "vmm.h"
+#include "heap.h"
 
 /* Multiboot v1 handoff values, saved for later phases. NOTE: mb_info is a
  * PHYSICAL address (multiboot is physical-address based); low memory stays
@@ -85,6 +86,18 @@ void kmain(u32 magic, u32 mbi) {
     console_print_u32(vmm_identity_frames() >> 8, CON_COLOR_WHITE);   /* MiB */
     console_puts(" MiB RAM, kernel window @0xC0000000, recursive PD @0xFFFFF000\r\n", CON_COLOR_GREEN);
 
+    /* ---- Phase 2: kernel heap ---- */
+    heap_init();
+    heap_verify();                    /* panics with details on any failure */
+    console_puts("heap verified: ", CON_COLOR_GREEN);
+    console_print_u32(heap_allocs(), CON_COLOR_WHITE);
+    console_puts(" allocs, peak ", CON_COLOR_YELLOW);
+    console_print_u32(heap_peak_bytes(), CON_COLOR_WHITE);
+    console_puts(" bytes, ", CON_COLOR_YELLOW);
+    console_print_u32(heap_pages_mapped(), CON_COLOR_WHITE);
+    console_puts(" pages @0xC8000000\r\n", CON_COLOR_GREEN);
+
+
 #ifdef LINDOWS_DEBUG
     console_puts("debug: multiboot magic ", CON_COLOR_RED);
     console_print_hex(magic, CON_COLOR_WHITE);
@@ -95,8 +108,7 @@ void kmain(u32 magic, u32 mbi) {
     console_puts("\r\n", CON_COLOR_WHITE);
 #endif
 
-    /* Phase 2 continues: heap, scheduler land here. Higher-half link
-     * relocation next. */
+    /* Phase 2 continues: scheduler lands here (heap is done). */
 #ifdef LINDOWS_FAULT_TEST
     /* Deliberate fault: ud2 -> #UD (invalid opcode). Exists to verify the
      * exception path + panic dump end-to-end (build with
