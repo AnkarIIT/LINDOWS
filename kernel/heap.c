@@ -11,6 +11,7 @@
 #include "pmm.h"
 #include "vmm.h"
 #include "panic.h"
+#include "spinlock.h"
 
 #define HDR_SIZE   ((u32)sizeof(block_t))         /* 16 */
 #define ALIGN8(n)  (((n) + 7u) & ~7u)
@@ -27,6 +28,7 @@ typedef struct block {
 static block_t* first_block = 0;
 static block_t* tail        = 0;
 static u32      mapped      = 0;   /* bytes mapped at HEAP_BASE */
+static spinlock_t heap_lock = SPINLOCK_INIT;   /* single-core cli lock */
 
 static u32 st_allocs = 0, st_frees = 0, st_used = 0, st_peak = 0;
 
@@ -79,6 +81,7 @@ void heap_init(void) {
 
 void* kmalloc(u32 n) {
     if (n == 0) return NULL;                 /* policy: 0 bytes = NULL */
+    spin_lock(&heap_lock);
     u32 need = ALIGN8(n);
 
     if (!first_block && expand(HDR_SIZE + need)) return NULL;
@@ -103,16 +106,21 @@ void* kmalloc(u32 n) {
             st_allocs++;
             st_used += b->size;
             if (st_used > st_peak) st_peak = st_used;
+            spin_unlock(&heap_lock);
             return (u8*)b + HDR_SIZE;
         }
         /* Nothing fits: grow by whole pages until the demand fits, then
          * walk again (the fresh tail block coalesces as it grows). */
-        if (expand(mapped + HDR_SIZE + need)) return NULL;
+        if (expand(mapped + HDR_SIZE + need)) {
+            spin_unlock(&heap_lock);
+            return NULL;
+        }
     }
 }
 
 void kfree(void* p) {
     if (!p) return;                          /* policy: free(NULL) ok */
+    spin_lock(&heap_lock);
 
     u32 v = (u32)p;
     if (v < HEAP_BASE + HDR_SIZE || v > HEAP_BASE + mapped || (v & 7u))
@@ -140,8 +148,11 @@ void kfree(void* p) {
         if (b->next) b->next->prev = pv;
         else         tail = pv;
     }
+    spin_unlock(&heap_lock);
 }
 
+/* kcalloc/krealloc take no lock of their own: kmalloc + kfree lock
+ * internally, and the fill/copy loops touch only the caller's new block. */
 void* kcalloc(u32 n, u32 m) {
     if (m && n > HEAP_MAX / m) return NULL;  /* overflow + sanity bound */
     u8* p = kmalloc(n * m);
