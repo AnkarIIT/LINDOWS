@@ -26,7 +26,7 @@ KERNEL_BIN = kernel/lindows.bin
 QEMU      ?= C:/OS/AI-OS/vendor/qemu/qemu-system-i386.exe
 
 K_OBJS = kernel/console.o kernel/panic.o kernel/gdt.o kernel/idt.o \
-         kernel/pmm.o kernel/vmm.o kernel/main.o
+         kernel/pmm.o kernel/vmm.o kernel/heap.o kernel/main.o
 A_OBJS = boot/boot.o boot/isr.o
 
 .PHONY: all profile-gen smoke clean
