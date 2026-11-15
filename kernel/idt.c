@@ -33,11 +33,8 @@ void isr_dispatch(u32 vector, u32* regs) {
         panic(exception_name[vector], vector, regs);
     }
 
-    if (vector == IRQ_TIMER_VEC) {
-        pit_ticks++;
-        outb(PIC_MASTER_CMD, 0x20);           /* EOI */
-        return;
-    }
+    /* IRQ0 (vector 32) never reaches here: the isr32 stub in boot/isr.S
+     * routes it through sched_tick() (tick count, EOI, context switch). */
 
     /* Unexpected but PIC-routed: log it, EOI it, keep running. Spurious IRQ7
      * lands here, for example. */
