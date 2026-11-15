@@ -24,6 +24,8 @@
 #include "pmm.h"
 #include "vmm.h"
 #include "heap.h"
+#include "spinlock.h"
+#include "sched.h"
 
 /* Multiboot v1 handoff values, saved for later phases. NOTE: mb_info is a
  * PHYSICAL address (multiboot is physical-address based); low memory stays
@@ -32,6 +34,39 @@ u32 mb_magic;
 u32 mb_info;
 
 #define MB_BOOTLOADER_MAGIC 0x2BADB002u
+
+/* ---- scheduler demo tasks (Phase 2 verification) ----
+ * Each prints its token ONCE PER SCHEDULING SLICE (it prints under the
+ * console spinlock — an IRQ pre-emption mid-putc would interleave cursor +
+ * serial state — then sleeps one tick, so the next token appears in the
+ * NEXT slice). kmain polls for both exits; the smoke test asserts strict
+ * <A><B> alternation, which only a working round-robin can produce. */
+#define TASK_TURNS 5
+static volatile u32 ta_count, tb_count;
+static spinlock_t print_lock = SPINLOCK_INIT;
+static void wait_ticks(u32 target);   /* defined below kmain's helpers */
+
+static void task_a(void) {
+    for (;;) {
+        spin_lock(&print_lock);
+        console_puts("<A>", CON_COLOR_CYAN);
+        spin_unlock(&print_lock);
+        ta_count++;
+        if (ta_count >= TASK_TURNS) task_exit();
+        wait_ticks(pit_ticks + 1);   /* pace: one token per slice */
+    }
+}
+
+static void task_b(void) {
+    for (;;) {
+        spin_lock(&print_lock);
+        console_puts("<B>", CON_COLOR_GREEN);
+        spin_unlock(&print_lock);
+        tb_count++;
+        if (tb_count >= TASK_TURNS) task_exit();
+        wait_ticks(pit_ticks + 1);   /* pace: one token per slice */
+    }
+}
 
 /* Wait until pit_ticks reaches `target`, with a spin watchdog so a dead PIT
  * panics instead of hanging silently. */
@@ -96,6 +131,24 @@ void kmain(u32 magic, u32 mbi) {
     console_puts(" bytes, ", CON_COLOR_YELLOW);
     console_print_u32(heap_pages_mapped(), CON_COLOR_WHITE);
     console_puts(" pages @0xC8000000\r\n", CON_COLOR_GREEN);
+
+    /* ---- Phase 2: pre-emptive round-robin scheduler ---- */
+    sched_init();
+    task_spawn(task_a);
+    task_spawn(task_b);
+    console_puts("sched: 2 tasks spawned, pre-emptive round-robin on IRQ0 (quantum 1 tick)\r\n", CON_COLOR_YELLOW);
+    /* kmain = task 0 = idle: hlt until both demo tasks have exited. */
+    for (;;) {
+        __asm__ volatile("hlt");
+        if (ta_count >= TASK_TURNS && tb_count >= TASK_TURNS) break;
+    }
+    console_puts("sched verified: A=", CON_COLOR_GREEN);
+    console_print_u32(ta_count, CON_COLOR_WHITE);
+    console_puts(" B=", CON_COLOR_YELLOW);
+    console_print_u32(tb_count, CON_COLOR_WHITE);
+    console_puts(", ", CON_COLOR_YELLOW);
+    console_print_u32(sched_switches(), CON_COLOR_WHITE);
+    console_puts(" pre-emptive switches (round-robin)\r\n", CON_COLOR_GREEN);
 
 
 #ifdef LINDOWS_DEBUG
