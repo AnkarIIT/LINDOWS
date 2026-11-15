@@ -17,6 +17,8 @@
 #include "gdt.h"
 #include "idt.h"
 #include "panic.h"
+#include "pmm.h"
+#include "vmm.h"
 
 /* Multiboot v1 handoff values, saved for later phases (paging needs the
  * memory map inside the info struct). */
@@ -58,6 +60,22 @@ void kmain(u32 magic, u32 mbi) {
     console_puts("phase 2: GDT installed (32-bit PM, flat memory, code+data)\r\n", CON_COLOR_YELLOW);
     console_puts("phase 2: IDT: 32 exceptions + 16 IRQs guarded, PIC-only, IRQ0 unmasked\r\n", CON_COLOR_YELLOW);
 
+    /* ---- Phase 2: physical + virtual memory ---- */
+    pmm_init(mb_info);
+    console_puts("pmm: memory map ", CON_COLOR_YELLOW);
+    console_puts(pmm_used_mmap() ? "multiboot mmap" : "mem_upper fallback", CON_COLOR_WHITE);
+    console_puts(", ", CON_COLOR_YELLOW);
+    console_print_u32(pmm_installed_frames(), CON_COLOR_WHITE);
+    console_puts(" frames installed (", CON_COLOR_YELLOW);
+    console_print_u32(pmm_free_frames(), CON_COLOR_WHITE);
+    console_puts(" free)\r\n", CON_COLOR_YELLOW);
+
+    vmm_init();
+    vmm_verify();
+    console_puts("vmm: paging ON (CR0.PG|WP): identity ", CON_COLOR_GREEN);
+    console_print_u32(vmm_identity_frames() >> 8, CON_COLOR_WHITE);   /* MiB */
+    console_puts(" MiB RAM, kernel alias @0xC0000000, recursive PD @0xFFFFF000\r\n", CON_COLOR_GREEN);
+
 #ifdef LINDOWS_DEBUG
     console_puts("debug: multiboot magic ", CON_COLOR_RED);
     console_print_hex(magic, CON_COLOR_WHITE);
@@ -68,13 +86,21 @@ void kmain(u32 magic, u32 mbi) {
     console_puts("\r\n", CON_COLOR_WHITE);
 #endif
 
-    /* Phase 2 continues: paging (uses mb_info), heap, scheduler land here. */
+    /* Phase 2 continues: heap, scheduler land here. Higher-half link
+     * relocation next. */
 #ifdef LINDOWS_FAULT_TEST
     /* Deliberate fault: ud2 -> #UD (invalid opcode). Exists to verify the
      * exception path + panic dump end-to-end (build with
      * -DLINDOWS_FAULT_TEST; never part of a normal kernel). A #UD is used
      * because it faults regardless of paging state. */
     __asm__ volatile("ud2");
+#endif
+#ifdef LINDOWS_PFAULT_TEST
+    /* Deliberate page fault: address beyond every tracked frame and beyond
+     * the identity map -> #PF, not-present (error code bit 0 = 0).
+     * Build with -DLINDOWS_PFAULT_TEST; never part of a normal kernel. */
+    volatile u32 pboom = *(volatile u32*)0x40000000u;   /* 1 GiB: unmapped */
+    console_print_u32(pboom, CON_COLOR_RED);           /* never reached */
 #endif
     for (;;) { __asm__ volatile("hlt"); }
 }
