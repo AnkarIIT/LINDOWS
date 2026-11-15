@@ -56,7 +56,14 @@ Goal: a basis for everything that follows.
       recursive PD @0xFFFFF000; CR0.PG|WP enabled. Verified live: alias
       readback, PIT still ticking under PG, and a -DLINDOWS_PFAULT_TEST
       build faults at 0x40000000 -> PANIC with CR2 = 0x40000000.
-      (Higher-half link relocation is a later step inside this item.)
+- [x] Higher-half link relocation — kernel/linker.ld + boot/boot.S. The kernel
+      image is linked at VMA = LMA + 0xC0000000 (0xC0101000 today: the first
+      4 KiB page after the pre-paging stub); boot.S builds the early tables
+      (identity 0..4 MiB, kernel window via the same PT, recursive PD), turns
+      on CR0.PG|WP, installs the (VMA) stack and jumps to kmain in the higher
+      half. Verified live: smoke test prints the banner from 0xC0101000,
+      panic dumps show VMA eip/stack, and both fault builds (#UD, #PF with
+      CR2 = 0x40000000) still produce clean PANICs.
 - [ ] Basic heap (linked-list, then better algorithms per profile)
 - [ ] Spinlocks / pre-emptive round-robin scheduler
 
