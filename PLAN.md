@@ -64,7 +64,15 @@ Goal: a basis for everything that follows.
       half. Verified live: smoke test prints the banner from 0xC0101000,
       panic dumps show VMA eip/stack, and both fault builds (#UD, #PF with
       CR2 = 0x40000000) still produce clean PANICs.
-- [ ] Basic heap (linked-list, then better algorithms per profile)
+- [x] Basic heap — kernel/heap.c. First-fit free list with split + coalesce,
+      grown page-by-page from the PMM into a dedicated 4 MiB region at
+      0xC8000000 (PD index 800, its own PT — the identity map and kernel
+      alias stay untouched). kmalloc/kfree/kcalloc/krealloc; kfree validates
+      pointers and panics on double free / corruption. Verified live:
+      pattern write/readback over 64 blocks, free-all + 64 KiB alloc over
+      the coalesced region, krealloc content preservation — smoke test
+      asserts the "heap verified" line. (Better algorithms per profile:
+      later, when profiles have real workload differences.)
 - [ ] Spinlocks / pre-emptive round-robin scheduler
 
 ## Phase 3 — 64-bit long mode
