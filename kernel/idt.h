@@ -46,7 +46,7 @@ extern const char* const exception_name[32];
  * [9]=EIP, [10]=CS, [11]=EFLAGS. */
 void isr_dispatch(u32 vector, u32* regs);
 
-/* PIT tick counter, incremented from isr_dispatch. */
+/* PIT tick counter, incremented from sched_tick (isr32 path). */
 extern volatile u32 pit_ticks;
 
 /* Diagnostics counter for unexpected/spurious IRQs. */
