@@ -1,0 +1,7 @@
+# Force LF everywhere — Windows checkouts must never CRLF-ify source that a
+# toolchain or script consumes byte-for-byte (gas, linker scripts, shell).
+* text=auto eol=lf
+*.exe binary
+*.bin binary
+*.zip binary
+*.iso binary
