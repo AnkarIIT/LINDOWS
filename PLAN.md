@@ -2,22 +2,25 @@
 
 Phased. Each phase ends in a committed, bootable or tested artifact.
 
-## Phase 0 — Toolchain & scaffold  [in progress]
+## Phase 0 — Toolchain & scaffold  [done]
 
 Goal: reproducible cross-compile + emulate loop on this Windows host.
 
 - [x] git repo initialized (master)
-- [ ] i686-elf-gcc cross-compiler (prebuilt) on PATH
-- [ ] nasm (assembler)
-- [ ] qemu-system-i386 / x86_64 (emulator)
-- [ ] `make`
-- [ ] "Hello, protected mode" prints via VGA in QEMU
+- [x] i686-elf-gcc cross-compiler (GCC 15.2.0 / binutils 2.45) extracted at tools/i686-elf/
+- [x] GNU `as` (gas) assembler — toolchain ships gas, so NASM is NOT needed
+- [x] qemu-system-i386 11.1.0 installed at C:\OS\tools\qemu\
+- [~] `make` — NOT installed here; use tools/build_direct.sh as the runnable build
+- [x] "Hello, protected mode" prints via VGA + serial in QEMU (live-verified)
 
 Notes
   - On Windows, build a *cross*-compiler (i686-elf / x86_64-elf), NOT the host
     gcc. Host gcc emits Windows PE/COFF; a kernel must be ELF.
   - OSDev convention: start 32-bit (i686-elf + GRUB multiboot), add 64-bit later.
-  - Prebuilt option for Windows: lordmilko/i686-elf-tools on GitHub.
+  - The prebuilt cross-toolchain ships `gas`, so boot.S/multiboot.inc are written
+    in GNU as syntax (not NASM).
+  - QEMU was installed without admin rights (Stefan Weil prebuilt build,
+    user-writable dir) — see notes/phase1-verification.md.
 
 ## Phase 1 — Bootstrapping a 32-bit kernel
 
@@ -33,11 +36,13 @@ Goal: first kernel boot under QEMU, VGA text output.
 
 Goal: a basis for everything that follows.
 
-- GDT (protected mode segments)
-- IDT + PIC/APIC interrupt handling
-- Physical + virtual paging, higher-half kernel
-- Basic heap (linked-list, then better algorithms per profile)
-- Spinlocks / pre-emptive round-robin scheduler
+- [x] GDT (protected mode segments) — kernel/gdt.c: null/code/data, far-jump
+      CS reload + data-segment reload; linker PHDRS (R E / R / RW), no RWX;
+      live-verified in QEMU (Phase 2 banner prints after gdt_init()).
+- [ ] IDT + PIC (8259A remap) + interrupt handling
+- [ ] Physical + virtual paging, higher-half kernel
+- [ ] Basic heap (linked-list, then better algorithms per profile)
+- [ ] Spinlocks / pre-emptive round-robin scheduler
 
 ## Phase 3 — 64-bit long mode
 
