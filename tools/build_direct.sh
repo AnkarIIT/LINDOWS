@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# build_direct.sh — build + verify the Phase-1 LINDOWS kernel with the prebuilt
-# i686-elf cross-toolchain DIRECTLY (GNU make is not installed on this host).
+# build_direct.sh — canonical LINDOWS build (GNU make is not installed on this
+# host; invoke with Git Bash:  & "C:\Program Files\Git\bin\bash.exe" tools/build_direct.sh)
 #
 # Assumes: tools/i686-elf/ already extracted from tools/i686-elf-tools-windows.zip
-# Usage:   ./tools/build_direct.sh [PROFILE=minimal]
+# Usage:   tools/build_direct.sh [PROFILE]        (PROFILE currently names only;
+#          the YAML manifests are not yet parsed — see profiles/README.md)
 set -euo pipefail
 
-# Native Windows path (forward slashes). Host-specific.
-ROOT="C:/OS/LINDOWS"
+ROOT="${LINDOWS_ROOT:-C:/OS/LINDOWS}"
 TBIN="$ROOT/tools/i686-elf/bin"
 cd "$ROOT"
 
@@ -17,45 +17,39 @@ echo ">> profile: $PROFILE"
 # 1. generate kernel/gen/profile_gen.h (mirrors the Makefile 'profile-gen' target)
 mkdir -p kernel/gen
 printf '#define PROFILE_NAME "%s"\n' "$PROFILE" > kernel/gen/profile_gen.h
-echo -n "   profile_gen.h: "; cat kernel/gen/profile_gen.h
+echo "   profile_gen.h: $(cat kernel/gen/profile_gen.h)"
 
-# 2. assemble the boot stub (gas: --32, include dir = boot/)
+# 2. assemble boot + interrupt stubs (gas: --32, include dir = boot/)
 "$TBIN/i686-elf-as.exe"  --32 -Iboot -o boot/boot.o boot/boot.S
-echo ">> boot.o assembled"
-
-# 2b. assemble the ISR stubs (Phase 2)
-"$TBIN/i686-elf-as.exe"  --32 -Iboot -o boot/isr.o boot/isr.S
-echo ">> isr.o assembled"
+"$TBIN/i686-elf-as.exe"  --32 -Iboot -o boot/isr.o  boot/isr.S
+echo ">> boot.o + isr.o assembled"
 
 # 3. compile the kernel (freestanding, no host libc)
-"$TBIN/i686-elf-gcc.exe" -ffreestanding -O2 -Wall -Wextra -nostdlib -Ikernel -Ikernel/gen -c kernel/main.c -o kernel/main.o
-echo ">> main.o compiled"
-
-# 3b. compile the GDT (Phase 2 core primitive)
-"$TBIN/i686-elf-gcc.exe" -ffreestanding -O2 -Wall -Wextra -nostdlib -Ikernel -Ikernel/gen -c kernel/gdt.c -o kernel/gdt.o
-echo ">> gdt.o compiled"
-
-# 3c. compile the IDT + PIC + PIT (timer IRQ)
-"$TBIN/i686-elf-gcc.exe" -ffreestanding -O2 -Wall -Wextra -nostdlib -Ikernel -Ikernel/gen -c kernel/idt.c -o kernel/idt.o
-echo ">> idt.o compiled"
+CFLAGS=(-ffreestanding -O2 -Wall -Wextra -nostdlib
+        -fno-asynchronous-unwind-tables -fno-stack-protector
+        -Ikernel -Ikernel/gen)
+for src in console panic gdt idt main; do
+    "$TBIN/i686-elf-gcc.exe" "${CFLAGS[@]}" -c "kernel/$src.c" -o "kernel/$src.o"
+done
+echo ">> console.o panic.o gdt.o idt.o main.o compiled"
 
 # 4. link (direct ld; minimal kernel needs no libgcc)
-"$TBIN/i686-elf-ld.exe" -T kernel/linker.ld boot/boot.o boot/isr.o kernel/gdt.o kernel/idt.o kernel/main.o -o kernel/lindows.bin
-echo ">> linked: kernel/lindows.bin"
-ls -la kernel/lindows.bin
+"$TBIN/i686-elf-ld.exe" -T kernel/linker.ld boot/boot.o boot/isr.o \
+    kernel/console.o kernel/panic.o kernel/gdt.o kernel/idt.o kernel/main.o \
+    -o kernel/lindows.bin
+echo ">> linked: kernel/lindows.bin ($(stat -c %s kernel/lindows.bin) bytes)"
 
 # 5. verify the resulting Multiboot ELF
-echo ">> ELF header"; "$TBIN/i686-elf-readelf.exe" -h kernel/lindows.bin | sed -n '1,16p'
-echo ">> sections";   "$TBIN/i686-elf-objdump.exe" -h kernel/lindows.bin | sed -n '1,12p'
+"$TBIN/i686-elf-readelf.exe" -h kernel/lindows.bin | grep -E "Class:|Machine:|Entry"
 echo ">> multiboot header check:"
 python - <<'PY'
 import struct
-b=open('kernel/lindows.bin','rb').read()
-i=b.find(b'\x02\xb0\xad\x1b')
-assert i>=0, "multiboot magic not found"
-magic,flags,checksum=struct.unpack_from('<III',b,i)
+b = open('kernel/lindows.bin', 'rb').read()
+i = b.find(b'\x02\xb0\xad\x1b')
+assert i >= 0, "multiboot magic not found"
+magic, flags, checksum = struct.unpack_from('<III', b, i)
 print(f"   @ 0x{i:x}: magic={hex(magic)} flags={hex(flags)} checksum={hex(checksum)}")
-assert (magic+flags+checksum)%(1<<32)==0, "bad checksum"
+assert (magic + flags + checksum) % (1 << 32) == 0, "bad checksum"
 print("   checksum valid (sum mod 2^32 == 0)  OK")
 PY
 echo ">> DONE: LINDOWS kernel built + verified as a Multiboot ELF"
