@@ -34,6 +34,15 @@
 /* Adopt boot.S's early tables, map all tracked RAM, reload CR3. */
 void vmm_init(void);
 
+/* Map one page-aligned (virt, phys) pair, RW + present, supervisor. Creates
+ * the covering page table on demand (a frame is taken from the PMM for it).
+ * Returns 0 on success, -1 on bad alignment or frame exhaustion. */
+int vmm_map_page(u32 virt, u32 phys);
+
+/* Unmap a page. Returns the physical frame that was mapped (0 if none);
+ * the caller owns it — e.g. hand it back to pmm_free(). */
+u32 vmm_unmap_page(u32 virt);
+
 /* Functional self-check: identity<->kernel alias, recursive PD readback,
  * and PIT ticks with paging on. Panics on failure. */
 void vmm_verify(void);
